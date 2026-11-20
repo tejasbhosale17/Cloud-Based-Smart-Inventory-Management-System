@@ -15,7 +15,7 @@ import type { Product } from './types/product';
 
 const products: Product[] = [
   {
-    id: 'notebook',
+    productId: 'notebook',
     name: 'Classic Notebook',
     category: 'Stationery',
     price: 4.99,
@@ -23,7 +23,7 @@ const products: Product[] = [
     lowStockThreshold: 25,
   },
   {
-    id: 'mouse',
+    productId: 'mouse',
     name: 'Wireless Mouse',
     category: 'Electronics',
     price: 24.5,
@@ -31,7 +31,7 @@ const products: Product[] = [
     lowStockThreshold: 20,
   },
   {
-    id: 'cable',
+    productId: 'cable',
     name: 'USB-C Cable',
     category: 'Electronics',
     price: 9.99,

@@ -4,7 +4,7 @@
 | ----- | ----------------------------------------- | ----------- |
 | 1     | Project structure and development tooling | Complete    |
 | 2     | Mock inventory dashboard                  | Complete    |
-| 3     | Product management Lambda functions       | Not started |
+| 3     | Product management Lambda functions       | Complete    |
 | 4     | API Gateway and infrastructure            | Not started |
 | 5     | Cognito authentication                    | Not started |
 | 6     | Inventory sales workflow                  | Not started |

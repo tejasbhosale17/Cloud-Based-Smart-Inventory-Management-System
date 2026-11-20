@@ -315,7 +315,7 @@ function App({ loadProducts = getMockProducts }: AppProps) {
                         const lowStock = isLowStock(product);
 
                         return (
-                          <tr key={product.id}>
+                          <tr key={product.productId}>
                             <td>
                               <span className="product-name">
                                 {product.name}
