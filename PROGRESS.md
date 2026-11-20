@@ -1,0 +1,14 @@
+# Project Progress
+
+| Phase | Scope                                     | Status      |
+| ----- | ----------------------------------------- | ----------- |
+| 1     | Project structure and development tooling | Complete    |
+| 2     | Mock inventory dashboard                  | Not started |
+| 3     | Product management Lambda functions       | Not started |
+| 4     | API Gateway and infrastructure            | Not started |
+| 5     | Cognito authentication                    | Not started |
+| 6     | Inventory sales workflow                  | Not started |
+| 7     | Inventory analytics                       | Not started |
+| 8     | Low-stock email notifications             | Not started |
+| 9     | CloudWatch monitoring and cost controls   | Not started |
+| 10    | Deployment and final documentation        | Not started |
