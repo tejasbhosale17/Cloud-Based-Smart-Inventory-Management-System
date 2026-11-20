@@ -32,11 +32,41 @@ partition key and the following product attributes: `name`, `category`, `price`,
 | DELETE | `/products/{productId}` | `deleteProduct` |
 
 The handlers expect the `PRODUCTS_TABLE_NAME` environment variable and AWS
-credentials/region supplied by the Lambda execution environment. They do not
-include API Gateway or DynamoDB deployment resources; those are added in Phase 4.
-The list handler uses a paginated DynamoDB scan, suitable for this small
-coursework catalog; scan read cost grows with table size. The dashboard does not
-poll the backend.
+credentials/region supplied by the Lambda execution environment. The list handler
+uses a paginated DynamoDB scan, suitable for this small coursework catalog;
+scan read cost grows with table size. The dashboard does not poll the backend.
+
+## AWS SAM API
+
+[`template.yaml`](./template.yaml) defines the HTTP API, five route-specific
+Lambda functions, and the DynamoDB product table. Each function receives only
+the DynamoDB action it needs, scoped to that table. The table uses provisioned
+throughput of 1 read capacity unit and 1 write capacity unit to keep the
+development configuration predictable; confirm Free Tier eligibility and
+regional pricing before deployment.
+
+Build the Lambda bundles with `npm run sam:build`. To deploy interactively, run
+`sam deploy --guided` and provide an allowed browser origin with the
+`FrontendOrigin` parameter. The deployed API URL and table name are exposed as
+CloudFormation outputs.
+
+For local development, the API Gateway URL is configured for port 3000 in
+[`samconfig.toml`](./samconfig.toml). Copy `env.local.example.json` to
+`env.local.json` and update its table name to the deployed development table,
+then run:
+
+```powershell
+sam local start-api --profile <aws-profile> --env-vars env.local.json
+```
+
+SAM local invokes the handlers on your machine, but DynamoDB requests still use
+the configured AWS credentials and target the named AWS table. Use a dedicated
+development stack and never put credentials in the environment file.
+Copy `frontend/.env.example` to `frontend/.env.local` when the frontend API
+client is introduced.
+
+The HTTP API has no Cognito authorizer yet. Do not expose it publicly until
+Phase 5 adds authentication.
 
 ## Local development
 

@@ -11,7 +11,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspace frontend && npm run typecheck --workspace backend",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sam:build": "sam build --template-file template.yaml"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",

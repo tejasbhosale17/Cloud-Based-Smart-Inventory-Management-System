@@ -12,5 +12,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["lambda.ts", "src/**/*.ts"]
 }

@@ -1,0 +1,212 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Cloud-Based Smart Inventory Management API
+
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+    AllowedPattern: '^[a-zA-Z0-9_-]+$'
+  FrontendOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Browser origin allowed to call the HTTP API.
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures:
+      - arm64
+    MemorySize: 128
+    Timeout: 5
+    Environment:
+      Variables:
+        PRODUCTS_TABLE_NAME: !Ref ProductsTable
+
+Resources:
+  InventoryApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref FrontendOrigin
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+        MaxAge: 300
+
+  ProductsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-products'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: productId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: productId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  CreateProductFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.createProduct
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt ProductsTable.Arn
+      Events:
+        CreateProduct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /products
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
+  ListProductsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.listProducts
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource: !GetAtt ProductsTable.Arn
+      Events:
+        ListProducts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /products
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
+  GetProductFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.getProduct
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt ProductsTable.Arn
+      Events:
+        GetProduct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /products/{productId}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
+  UpdateProductFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.updateProduct
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ProductsTable.Arn
+      Events:
+        UpdateProduct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /products/{productId}
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
+  DeleteProductFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.deleteProduct
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DeleteItem
+              Resource: !GetAtt ProductsTable.Arn
+      Events:
+        DeleteProduct:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /products/{productId}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL for the product API.
+    Value: !Sub 'https://${InventoryApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}'
+  ProductsTableName:
+    Description: DynamoDB product table name.
+    Value: !Ref ProductsTable

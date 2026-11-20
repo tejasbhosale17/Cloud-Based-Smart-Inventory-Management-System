@@ -7,7 +7,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.149"
+    "@types/aws-lambda": "^8.10.149",
+    "esbuild": "^0.25.12"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1174.0",
