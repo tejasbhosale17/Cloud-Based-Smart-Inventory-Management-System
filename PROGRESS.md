@@ -3,7 +3,7 @@
 | Phase | Scope                                     | Status      |
 | ----- | ----------------------------------------- | ----------- |
 | 1     | Project structure and development tooling | Complete    |
-| 2     | Mock inventory dashboard                  | Not started |
+| 2     | Mock inventory dashboard                  | Complete    |
 | 3     | Product management Lambda functions       | Not started |
 | 4     | API Gateway and infrastructure            | Not started |
 | 5     | Cognito authentication                    | Not started |

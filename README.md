@@ -10,6 +10,12 @@ with a React and TypeScript frontend and AWS serverless backend.
 - AWS infrastructure and service integrations will be added in their planned
   project phases.
 
+## Inventory dashboard
+
+The current dashboard uses local mock products. It provides inventory summary
+cards, product search, category and low-stock filters, and loading, empty, and
+error states. Product changes and API integration are planned for later phases.
+
 ## Local development
 
 Requirements: Node.js 20 or newer and npm.

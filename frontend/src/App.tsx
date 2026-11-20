@@ -1,9 +1,361 @@
-function App() {
+import { useEffect, useMemo, useState } from 'react';
+import { getMockProducts } from './data/products';
+import type { Product } from './types/product';
+
+type LoadState = 'loading' | 'ready' | 'error';
+type StockFilter = 'all' | 'low';
+
+interface AppProps {
+  loadProducts?: () => Promise<Product[]>;
+}
+
+function isLowStock(product: Product): boolean {
+  return product.quantity <= product.lowStockThreshold;
+}
+
+function App({ loadProducts = getMockProducts }: AppProps) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [stockFilter, setStockFilter] = useState<StockFilter>('all');
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+
+    setLoadState('loading');
+    setErrorMessage('');
+
+    Promise.resolve()
+      .then(loadProducts)
+      .then((loadedProducts) => {
+        if (isCurrentRequest) {
+          setProducts(loadedProducts);
+          setLoadState('ready');
+        }
+      })
+      .catch((error: unknown) => {
+        if (isCurrentRequest) {
+          setErrorMessage(
+            error instanceof Error && error.message
+              ? error.message
+              : 'Unable to load inventory. Please try again.',
+          );
+          setLoadState('error');
+        }
+      });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [loadProducts, retryCount]);
+
+  const categories = useMemo(
+    () => [...new Set(products.map((product) => product.category))].sort(),
+    [products],
+  );
+
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        product.name.toLowerCase().includes(normalizedSearch) ||
+        product.category.toLowerCase().includes(normalizedSearch);
+      const matchesCategory =
+        selectedCategory === 'all' || product.category === selectedCategory;
+      const matchesStock = stockFilter === 'all' || isLowStock(product);
+
+      return matchesSearch && matchesCategory && matchesStock;
+    });
+  }, [products, searchTerm, selectedCategory, stockFilter]);
+
+  const totalUnits = products.reduce(
+    (total, product) => total + product.quantity,
+    0,
+  );
+  const lowStockCount = products.filter(isLowStock).length;
+
+  function clearFilters() {
+    setSearchTerm('');
+    setSelectedCategory('all');
+    setStockFilter('all');
+  }
+
   return (
-    <main>
-      <h1>Cloud-Based Smart Inventory Management System</h1>
-      <p>Project setup is ready for the inventory dashboard.</p>
-    </main>
+    <div className="dashboard-shell">
+      <aside className="sidebar">
+        <a className="brand" href="#overview" aria-label="Smart Inventory home">
+          <span className="brand-mark">SI</span>
+          <span>
+            <strong>Smart Inventory</strong>
+            <small>Management System</small>
+          </span>
+        </a>
+
+        <p className="sidebar-label">WORKSPACE</p>
+        <nav className="primary-navigation" aria-label="Main navigation">
+          <a
+            className="navigation-link active"
+            href="#overview"
+            aria-current="page"
+          >
+            <span className="navigation-indicator" aria-hidden="true" />
+            Overview
+          </a>
+          <a className="navigation-link" href="#product-list">
+            <span className="navigation-indicator" aria-hidden="true" />
+            Products
+          </a>
+        </nav>
+
+        <div className="sidebar-footer">
+          <span className="sidebar-status-dot" aria-hidden="true" />
+          <span>Mock inventory data</span>
+        </div>
+      </aside>
+
+      <main className="dashboard-main" id="overview">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">INVENTORY MANAGEMENT</p>
+            <h1>Overview</h1>
+          </div>
+          <div
+            className="profile-chip"
+            aria-label="Signed in as Inventory Admin"
+          >
+            <span className="profile-avatar" aria-hidden="true">
+              IA
+            </span>
+            <span className="profile-name">Inventory Admin</span>
+          </div>
+        </header>
+
+        <section className="page-intro" aria-labelledby="page-title">
+          <div>
+            <h2 id="page-title">Inventory at a glance</h2>
+            <p>Monitor your products and stock levels in one place.</p>
+          </div>
+        </section>
+
+        {loadState === 'loading' && (
+          <div className="state-panel loading-panel" role="status">
+            <span className="loading-spinner" aria-hidden="true" />
+            <span>Loading inventory…</span>
+          </div>
+        )}
+
+        {loadState === 'error' && (
+          <section className="state-panel error-panel" role="alert">
+            <div>
+              <h2>Inventory could not be loaded</h2>
+              <p>{errorMessage}</p>
+            </div>
+            <button
+              className="button button-secondary"
+              onClick={() => setRetryCount((count) => count + 1)}
+              type="button"
+            >
+              Try again
+            </button>
+          </section>
+        )}
+
+        {loadState === 'ready' && (
+          <>
+            <section className="summary-grid" aria-label="Inventory summary">
+              <article className="summary-card">
+                <div className="summary-card-heading">
+                  <span className="summary-icon icon-blue" aria-hidden="true">
+                    P
+                  </span>
+                  <span>Product SKUs</span>
+                </div>
+                <p className="summary-value">{products.length}</p>
+                <p className="summary-caption">Products in your catalog</p>
+              </article>
+              <article className="summary-card">
+                <div className="summary-card-heading">
+                  <span className="summary-icon icon-violet" aria-hidden="true">
+                    U
+                  </span>
+                  <span>Total units</span>
+                </div>
+                <p className="summary-value">
+                  {new Intl.NumberFormat('en-US').format(totalUnits)}
+                </p>
+                <p className="summary-caption">Units currently in stock</p>
+              </article>
+              <article className="summary-card">
+                <div className="summary-card-heading">
+                  <span className="summary-icon icon-amber" aria-hidden="true">
+                    !
+                  </span>
+                  <span>Low stock items</span>
+                </div>
+                <p className="summary-value">{lowStockCount}</p>
+                <p className="summary-caption">At or below reorder level</p>
+              </article>
+              <article className="summary-card">
+                <div className="summary-card-heading">
+                  <span className="summary-icon icon-green" aria-hidden="true">
+                    C
+                  </span>
+                  <span>Categories</span>
+                </div>
+                <p className="summary-value">{categories.length}</p>
+                <p className="summary-caption">Product categories</p>
+              </article>
+            </section>
+
+            <section
+              className="inventory-section"
+              id="product-list"
+              aria-labelledby="inventory-title"
+            >
+              <div className="section-heading">
+                <div>
+                  <h2 id="inventory-title">Product inventory</h2>
+                  <p>
+                    Showing {filteredProducts.length} of {products.length}{' '}
+                    products
+                  </p>
+                </div>
+                {lowStockCount > 0 && (
+                  <span className="low-stock-summary">
+                    {lowStockCount} need attention
+                  </span>
+                )}
+              </div>
+
+              <div className="table-toolbar">
+                <label className="search-control">
+                  <span className="visually-hidden">Search products</span>
+                  <input
+                    aria-label="Search products"
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search products"
+                    type="search"
+                    value={searchTerm}
+                  />
+                </label>
+
+                <label className="filter-control">
+                  <span className="visually-hidden">Category</span>
+                  <select
+                    aria-label="Category"
+                    onChange={(event) =>
+                      setSelectedCategory(event.target.value)
+                    }
+                    value={selectedCategory}
+                  >
+                    <option value="all">All categories</option>
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="low-stock-filter">
+                  <input
+                    checked={stockFilter === 'low'}
+                    onChange={(event) =>
+                      setStockFilter(event.target.checked ? 'low' : 'all')
+                    }
+                    type="checkbox"
+                  />
+                  <span>Low stock only</span>
+                </label>
+              </div>
+
+              {products.length === 0 ? (
+                <div className="empty-state">
+                  <span className="empty-state-icon" aria-hidden="true">
+                    —
+                  </span>
+                  <h3>No products yet</h3>
+                  <p>Your inventory is empty.</p>
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="empty-state">
+                  <span className="empty-state-icon" aria-hidden="true">
+                    ?
+                  </span>
+                  <h3>No products match your filters</h3>
+                  <p>Try a different search or clear the selected filters.</p>
+                  <button
+                    className="button button-link"
+                    onClick={clearFilters}
+                    type="button"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Product</th>
+                        <th scope="col">Category</th>
+                        <th scope="col">Price</th>
+                        <th scope="col">Quantity</th>
+                        <th scope="col">Reorder level</th>
+                        <th scope="col">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.map((product) => {
+                        const lowStock = isLowStock(product);
+
+                        return (
+                          <tr key={product.id}>
+                            <td>
+                              <span className="product-name">
+                                {product.name}
+                              </span>
+                            </td>
+                            <td>{product.category}</td>
+                            <td>
+                              {new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                              }).format(product.price)}
+                            </td>
+                            <td>
+                              <span className="quantity-value">
+                                {product.quantity}
+                              </span>{' '}
+                              units
+                            </td>
+                            <td>{product.lowStockThreshold} units</td>
+                            <td>
+                              <span
+                                className={`status-pill ${
+                                  lowStock ? 'status-low' : 'status-healthy'
+                                }`}
+                              >
+                                {lowStock ? 'Low stock' : 'In stock'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </main>
+    </div>
   );
 }
 
