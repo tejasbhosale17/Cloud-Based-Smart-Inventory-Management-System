@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -9,117 +8,158 @@ import {
   waitFor,
 } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import App from './App';
-import type { Product } from './types/product';
+import { fetchProducts, UnauthorizedRequestError } from './api/products';
 
-const products: Product[] = [
-  {
-    productId: 'notebook',
-    name: 'Classic Notebook',
-    category: 'Stationery',
-    price: 4.99,
-    quantity: 120,
-    lowStockThreshold: 25,
-  },
-  {
-    productId: 'mouse',
-    name: 'Wireless Mouse',
-    category: 'Electronics',
-    price: 24.5,
-    quantity: 18,
-    lowStockThreshold: 20,
-  },
-  {
-    productId: 'cable',
-    name: 'USB-C Cable',
-    category: 'Electronics',
-    price: 9.99,
-    quantity: 7,
-    lowStockThreshold: 15,
-  },
-];
+const authState = vi.hoisted(() => ({
+  isLoading: false,
+  isAuthenticated: false,
+  user: null as {
+    access_token: string;
+    profile: { email: string };
+  } | null,
+  signinRedirect: vi.fn(),
+  removeUser: vi.fn(),
+}));
 
-afterEach(cleanup);
+vi.mock('react-oidc-context', () => ({
+  useAuth: () => authState,
+}));
 
-describe('inventory dashboard', () => {
-  it('shows a loading state while products are being fetched', async () => {
-    let resolveProducts: (products: Product[]) => void = () => undefined;
-    const loadProducts = vi.fn(
-      () =>
-        new Promise<Product[]>((resolve) => {
-          resolveProducts = resolve;
-        }),
-    );
+vi.mock('./api/products', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api/products')>();
+  return { ...actual, fetchProducts: vi.fn() };
+});
 
-    render(<App loadProducts={loadProducts} />);
+const configuration = {
+  apiBaseUrl: 'https://api.example.test/dev',
+  authority: 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_example',
+  clientId: 'public-client-id',
+  cognitoDomain: 'https://inventory.auth.us-east-1.amazoncognito.com',
+  redirectUri: 'http://localhost:5173',
+  logoutUri: 'http://localhost:5173',
+};
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading inventory');
+const product = {
+  productId: 'notebook',
+  name: 'Classic Notebook',
+  category: 'Stationery',
+  price: 4.99,
+  quantity: 12,
+  lowStockThreshold: 5,
+};
 
-    await waitFor(() => expect(loadProducts).toHaveBeenCalledOnce());
-    await act(async () => {
-      resolveProducts(products);
-    });
+function renderApp(path = '/') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App configuration={configuration} />
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  authState.isLoading = false;
+  authState.isAuthenticated = false;
+  authState.user = null;
+  authState.signinRedirect.mockReset();
+  authState.removeUser.mockReset().mockResolvedValue(undefined);
+  vi.mocked(fetchProducts).mockReset().mockResolvedValue([product]);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe('authenticated application routes', () => {
+  it('redirects an unauthenticated visitor to sign-in', async () => {
+    renderApp();
+
     expect(
-      await screen.findByRole('heading', { name: 'Product inventory' }),
+      await screen.findByRole('heading', {
+        name: 'Welcome to Smart Inventory',
+      }),
     ).toBeInTheDocument();
+    expect(screen.queryByText('Classic Notebook')).not.toBeInTheDocument();
   });
 
-  it('shows inventory summaries and filters by search, category, and stock', async () => {
-    render(<App loadProducts={() => Promise.resolve(products)} />);
+  it('starts Cognito sign-in from the login page', async () => {
+    renderApp('/login');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Sign in or create an account' }),
+    );
+
+    await waitFor(() =>
+      expect(authState.signinRedirect).toHaveBeenCalledOnce(),
+    );
+  });
+
+  it('loads the inventory with the signed-in access token', async () => {
+    authState.isAuthenticated = true;
+    authState.user = {
+      access_token: 'employee-access-token',
+      profile: { email: 'employee@example.test' },
+    };
+
+    renderApp();
 
     expect(await screen.findByText('Classic Notebook')).toBeInTheDocument();
-    expect(screen.getByText('145')).toBeInTheDocument();
-    expect(
-      screen.getAllByText('2', { selector: '.summary-value' }),
-    ).toHaveLength(2);
-
-    fireEvent.change(
-      screen.getByRole('searchbox', { name: 'Search products' }),
-      {
-        target: { value: 'usb' },
-      },
+    expect(fetchProducts).toHaveBeenCalledWith(
+      configuration.apiBaseUrl,
+      'employee-access-token',
     );
-    expect(screen.getByText('USB-C Cable')).toBeInTheDocument();
-    expect(screen.queryByText('Classic Notebook')).not.toBeInTheDocument();
+  });
 
-    fireEvent.change(
-      screen.getByRole('searchbox', { name: 'Search products' }),
-      {
-        target: { value: '' },
-      },
-    );
-    fireEvent.change(screen.getByRole('combobox', { name: 'Category' }), {
-      target: { value: 'Electronics' },
+  it('clears the session and returns to sign-in after an API 401', async () => {
+    authState.isAuthenticated = true;
+    authState.user = {
+      access_token: 'expired-access-token',
+      profile: { email: 'employee@example.test' },
+    };
+    authState.removeUser.mockImplementation(async () => {
+      authState.isAuthenticated = false;
+      authState.user = null;
     });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Low stock only' }));
-
-    expect(screen.getByText('Wireless Mouse')).toBeInTheDocument();
-    expect(screen.getByText('USB-C Cable')).toBeInTheDocument();
-    expect(screen.queryByText('Classic Notebook')).not.toBeInTheDocument();
-  });
-
-  it('shows a helpful empty state when there are no products', async () => {
-    render(<App loadProducts={() => Promise.resolve([])} />);
-
-    expect(await screen.findByText('No products yet')).toBeInTheDocument();
-    expect(screen.getByText('Your inventory is empty.')).toBeInTheDocument();
-  });
-
-  it('shows load errors and retries the request', async () => {
-    const loadProducts = vi
-      .fn<() => Promise<Product[]>>()
-      .mockRejectedValueOnce(new Error('Mock service unavailable'))
-      .mockResolvedValueOnce(products);
-
-    render(<App loadProducts={loadProducts} />);
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Mock service unavailable',
+    vi.mocked(fetchProducts).mockRejectedValueOnce(
+      new UnauthorizedRequestError(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
-    expect(await screen.findByText('Classic Notebook')).toBeInTheDocument();
-    await waitFor(() => expect(loadProducts).toHaveBeenCalledTimes(2));
+    renderApp();
+
+    expect(
+      await screen.findByText(
+        'Your session expired. Sign in again to continue.',
+      ),
+    ).toBeInTheDocument();
+    expect(authState.removeUser).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the session-expired route blocked if local session removal fails', async () => {
+    authState.isAuthenticated = true;
+    authState.user = {
+      access_token: 'expired-access-token',
+      profile: { email: 'employee@example.test' },
+    };
+    authState.removeUser.mockRejectedValueOnce(
+      new Error('Storage unavailable'),
+    );
+    vi.mocked(fetchProducts).mockRejectedValueOnce(
+      new UnauthorizedRequestError(),
+    );
+
+    renderApp();
+
+    expect(
+      await screen.findByText(
+        'Your session expired. Sign in again to continue.',
+      ),
+    ).toBeInTheDocument();
+    expect(authState.removeUser).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole('heading', { name: 'Product inventory' }),
+    ).not.toBeInTheDocument();
   });
 });

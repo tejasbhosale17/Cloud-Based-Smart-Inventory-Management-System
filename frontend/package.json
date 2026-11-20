@@ -9,8 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "oidc-client-ts": "^3.5.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-oidc-context": "^3.3.1",
+    "react-router-dom": "^7.18.6"
   },
   "devDependencies": {
     "@types/react": "^19.1.2",

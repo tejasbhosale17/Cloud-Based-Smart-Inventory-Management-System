@@ -6,7 +6,7 @@
 | 2     | Mock inventory dashboard                  | Complete    |
 | 3     | Product management Lambda functions       | Complete    |
 | 4     | API Gateway and infrastructure            | Complete    |
-| 5     | Cognito authentication                    | Not started |
+| 5     | Cognito authentication                    | Complete    |
 | 6     | Inventory sales workflow                  | Not started |
 | 7     | Inventory analytics                       | Not started |
 | 8     | Low-stock email notifications             | Not started |

@@ -12,9 +12,11 @@ with a React and TypeScript frontend and AWS serverless backend.
 
 ## Inventory dashboard
 
-The current dashboard uses local mock products. It provides inventory summary
-cards, product search, category and low-stock filters, and loading, empty, and
-error states. Product changes and API integration are planned for later phases.
+The inventory dashboard loads products from the protected API and shows inventory
+summary cards, product search, category and low-stock filters, and loading,
+empty, and error states. Employees sign in through Amazon Cognito Managed Login.
+The browser uses the OIDC authorization-code flow with PKCE; the API client sends
+the access token as a bearer token.
 
 ## Product API handlers
 
@@ -39,16 +41,19 @@ scan read cost grows with table size. The dashboard does not poll the backend.
 ## AWS SAM API
 
 [`template.yaml`](./template.yaml) defines the HTTP API, five route-specific
-Lambda functions, and the DynamoDB product table. Each function receives only
-the DynamoDB action it needs, scoped to that table. The table uses provisioned
-throughput of 1 read capacity unit and 1 write capacity unit to keep the
-development configuration predictable; confirm Free Tier eligibility and
-regional pricing before deployment.
+Lambda functions, the DynamoDB product table, an employee Cognito user pool,
+and a public Cognito app client/domain. API Gateway validates Cognito access
+tokens with a JWT authorizer. Each function receives only the DynamoDB action it
+needs, scoped to that table. The table uses provisioned throughput of 1 read
+capacity unit and 1 write capacity unit to keep the development configuration
+predictable; confirm Free Tier eligibility and regional pricing before
+deployment.
 
 Build the Lambda bundles with `npm run sam:build`. To deploy interactively, run
-`sam deploy --guided` and provide an allowed browser origin with the
-`FrontendOrigin` parameter. The deployed API URL and table name are exposed as
-CloudFormation outputs.
+`sam deploy --guided`, provide an allowed browser origin with the
+`FrontendOrigin` parameter, and provide a `CognitoDomainPrefix` unique within
+the deployment region. The deployed API URL, table name, Cognito issuer, app
+client ID, and managed-login domain are exposed as CloudFormation outputs.
 
 For local development, the API Gateway URL is configured for port 3000 in
 [`samconfig.toml`](./samconfig.toml). Copy `env.local.example.json` to
@@ -62,11 +67,24 @@ sam local start-api --profile <aws-profile> --env-vars env.local.json
 SAM local invokes the handlers on your machine, but DynamoDB requests still use
 the configured AWS credentials and target the named AWS table. Use a dedicated
 development stack and never put credentials in the environment file.
-Copy `frontend/.env.example` to `frontend/.env.local` when the frontend API
-client is introduced.
+Use a deployed development API to verify API Gateway's JWT authorization
+end-to-end; local Lambda invocation does not replace that verification.
+Copy `frontend/.env.example` to `frontend/.env.local`, then fill in the API URL
+and Cognito values from the stack outputs. For local sign-in, set
+`FrontendOrigin` to `http://localhost:5173`; the frontend defaults its callback
+and logout URLs to the current browser origin.
 
-The HTTP API has no Cognito authorizer yet. Do not expose it publicly until
-Phase 5 adds authentication.
+The Cognito callback and logout URLs must exactly match `FrontendOrigin`.
+Production callbacks require HTTPS. The S3 static website endpoint is HTTP-only,
+so configure an HTTPS frontend origin (for example, through CloudFront) before
+using Cognito authentication in production. No CloudFront distribution or AWS
+resources are created by this project phase.
+
+The user pool allows employee self-registration with verified email and
+password sign-in. The app client has no client secret and only enables the
+authorization-code flow. Access tokens last 60 minutes; expired or revoked
+tokens cause the frontend to clear its session and return to sign-in. No SMS or
+low-stock notification service is configured in this phase.
 
 ## Local development
 
@@ -77,7 +95,8 @@ npm install
 npm run dev --workspace frontend
 ```
 
-AWS deployment configuration will be introduced in a later phase.
+The frontend requires the public API and Cognito settings described above. These
+are configuration values, not credentials; do not commit `.env.local` files.
 
 ## Quality checks
 
@@ -92,8 +111,10 @@ npm test
 
 ## Configuration and security
 
-Do not commit `.env` files, AWS credentials, or other secrets. Use environment
-variables and AWS-managed identity/configuration for future integrations.
+Do not commit `.env` files, AWS credentials, or other secrets. Cognito's public
+app client ID and issuer/domain are not secrets, but keep per-environment
+settings in ignored local environment files. Lambda AWS access uses its
+execution role; do not add static AWS credentials to the application.
 
 ## Project progress
 

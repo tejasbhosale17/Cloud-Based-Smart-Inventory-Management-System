@@ -10,7 +10,13 @@ Parameters:
   FrontendOrigin:
     Type: String
     Default: http://localhost:5173
-    Description: Browser origin allowed to call the HTTP API.
+    Description: Browser callback and origin allowed to use the application.
+  CognitoDomainPrefix:
+    Type: String
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+    Description: Lowercase prefix unique within the deployment region for the Cognito domain.
 
 Globals:
   Function:
@@ -40,6 +46,15 @@ Resources:
           - PUT
           - DELETE
         MaxAge: 300
+      Auth:
+        Authorizers:
+          CognitoJwtAuthorizer:
+            IdentitySource: '$request.header.Authorization'
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${EmployeeUserPool}'
+              audience:
+                - !Ref EmployeeUserPoolClient
+        DefaultAuthorizer: CognitoJwtAuthorizer
 
   ProductsTable:
     Type: AWS::DynamoDB::Table
@@ -57,6 +72,64 @@ Resources:
           KeyType: HASH
       SSESpecification:
         SSEEnabled: true
+
+  EmployeeUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-employees'
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      MfaConfiguration: OFF
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  EmployeeUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref EmployeeUserPool
+      ClientName: !Sub '${AWS::StackName}-frontend'
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Ref FrontendOrigin
+      LogoutURLs:
+        - !Ref FrontendOrigin
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  EmployeeUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref EmployeeUserPool
 
   CreateProductFunction:
     Type: AWS::Serverless::Function
@@ -210,3 +283,12 @@ Outputs:
   ProductsTableName:
     Description: DynamoDB product table name.
     Value: !Ref ProductsTable
+  CognitoAuthority:
+    Description: OIDC issuer for the employee user pool.
+    Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${EmployeeUserPool}'
+  CognitoClientId:
+    Description: Public app client ID for the frontend.
+    Value: !Ref EmployeeUserPoolClient
+  CognitoDomain:
+    Description: Cognito managed-login domain.
+    Value: !Sub 'https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com'
