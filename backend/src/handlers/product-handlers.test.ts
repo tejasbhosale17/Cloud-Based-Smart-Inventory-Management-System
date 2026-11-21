@@ -215,6 +215,15 @@ describe('product handlers', () => {
       message: 'Internal server error.',
     });
     expect(logError).toHaveBeenCalledOnce();
+    expect(logError).toHaveBeenCalledWith(
+      JSON.stringify({
+        level: 'ERROR',
+        message: 'Product operation failed.',
+        operation: 'listProducts',
+        requestId: 'test-request',
+        errorName: 'Error',
+      }),
+    );
     expect(logError.mock.calls[0]?.[0]).not.toContain(
       'database connection detail',
     );

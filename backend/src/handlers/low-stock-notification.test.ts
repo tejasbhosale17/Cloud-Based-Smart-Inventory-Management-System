@@ -140,7 +140,15 @@ describe('low-stock notification handler', () => {
       batchItemFailures: [{ itemIdentifier: 'sequence-1' }],
     });
     expect(publish).toHaveBeenCalledTimes(2);
-    expect(logError).toHaveBeenCalledOnce();
+    expect(logError).toHaveBeenCalledWith(
+      JSON.stringify({
+        level: 'ERROR',
+        message: 'Low-stock notification failed.',
+        operation: 'notifyLowStock',
+        eventId: 'record-1',
+        errorName: 'Error',
+      }),
+    );
   });
 
   it('fails malformed stream records explicitly and returns their sequence for retry', async () => {
@@ -160,6 +168,14 @@ describe('low-stock notification handler', () => {
       batchItemFailures: [{ itemIdentifier: 'sequence-1' }],
     });
     expect(publish).not.toHaveBeenCalled();
-    expect(logError).toHaveBeenCalledOnce();
+    expect(logError).toHaveBeenCalledWith(
+      JSON.stringify({
+        level: 'ERROR',
+        message: 'Low-stock notification failed.',
+        operation: 'notifyLowStock',
+        eventId: 'record-1',
+        errorName: 'Error',
+      }),
+    );
   });
 });

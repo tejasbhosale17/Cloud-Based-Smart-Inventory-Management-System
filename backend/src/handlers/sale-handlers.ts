@@ -9,6 +9,7 @@ import {
 } from '../sales/sale-repository.js';
 import type { SaleRepository } from '../sales/sale-repository.js';
 import { parseSaleInput, SaleInputError } from '../sales/sale.js';
+import { logError } from '../observability/structured-logger.js';
 
 type SaleLambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -59,14 +60,10 @@ export function createSaleHandler(
         return jsonResponse(409, { message: error.message });
       }
 
-      console.error(
-        JSON.stringify({
-          level: 'error',
-          message: 'Sale creation failed.',
-          requestId: event.requestContext.requestId,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-        }),
-      );
+      logError('Sale creation failed.', error, {
+        operation: 'createSale',
+        requestId: event.requestContext.requestId,
+      });
       return jsonResponse(500, { message: 'Internal server error.' });
     }
   };

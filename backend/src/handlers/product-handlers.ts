@@ -6,6 +6,7 @@ import type {
 import { DuplicateProductError } from '../products/product-repository.js';
 import type { ProductRepository } from '../products/product-repository.js';
 import { parseProductInput, ProductInputError } from '../products/product.js';
+import { logError } from '../observability/structured-logger.js';
 
 type ProductLambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -47,15 +48,10 @@ function errorResponse(
     return jsonResponse(409, { message: 'Product already exists.' });
   }
 
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      message: 'Product operation failed.',
-      operation,
-      requestId: event.requestContext.requestId,
-      errorName: error instanceof Error ? error.name : 'UnknownError',
-    }),
-  );
+  logError('Product operation failed.', error, {
+    operation,
+    requestId: event.requestContext.requestId,
+  });
   return jsonResponse(500, { message: 'Internal server error.' });
 }
 

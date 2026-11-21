@@ -35,16 +35,29 @@ Globals:
       - arm64
     MemorySize: 128
     Timeout: 5
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: INFO
     Environment:
       Variables:
         PRODUCTS_TABLE_NAME: !Ref ProductsTable
         SALES_TABLE_NAME: !Ref SalesTable
 
 Resources:
+  InventoryApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-access'
+      RetentionInDays: 7
+
   InventoryApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref StageName
+      AccessLogSettings:
+        DestinationArn: !GetAtt InventoryApiAccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","routeKey":"$context.routeKey","status":"$context.status","responseLength":"$context.responseLength"}'
       CorsConfiguration:
         AllowOrigins:
           - !Ref FrontendOrigin
@@ -390,6 +403,49 @@ Resources:
         Minify: true
         Target: es2022
         Format: esm
+
+  CreateProductFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${CreateProductFunction}'
+      RetentionInDays: 7
+
+  ListProductsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ListProductsFunction}'
+      RetentionInDays: 7
+
+  GetProductFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GetProductFunction}'
+      RetentionInDays: 7
+
+  UpdateProductFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${UpdateProductFunction}'
+      RetentionInDays: 7
+
+  DeleteProductFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${DeleteProductFunction}'
+      RetentionInDays: 7
+
+  CreateSaleFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${CreateSaleFunction}'
+      RetentionInDays: 7
+
+  LowStockNotificationFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: HasLowStockEmailAddress
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${LowStockNotificationFunction}'
+      RetentionInDays: 7
 
 Outputs:
   ApiBaseUrl:

@@ -125,6 +125,41 @@ subscriptions are configured; SMS is not implemented.
 Notification failures are retried by the stream event source mapping and do not
 roll back an already committed inventory update or sale.
 
+## CloudWatch monitoring and cost controls
+
+The SAM template enables JSON Lambda logs and API Gateway HTTP API access logs.
+Lambda log groups and the API access log group retain events for 7 days. API
+access records contain the request ID, route key, response status, and response
+size; they do not capture request bodies or authorization headers. Application
+error records include the operation and request or stream event ID, plus the
+error type, but exclude raw exception messages and request data.
+
+Use CloudWatch Logs Insights to find recent structured application errors:
+
+```text
+fields @timestamp, @message
+| filter @message like /"level":"ERROR"/
+| sort @timestamp desc
+| limit 20
+```
+
+For health checks, review Lambda `Errors`, `Throttles`, `Duration`, and
+`Invocations`; API Gateway `4xx`, `5xx`, `Count`, and `Latency`; and DynamoDB
+throttling and consumed-capacity metrics. When email notifications are enabled,
+also check the notification Lambda's errors and `IteratorAge`. The project does
+not enable route-level detailed metrics or create CloudWatch alarms or
+dashboards, which can add recurring charges.
+
+Cost controls include 128 MB Lambda functions with a 5-second timeout and ARM64
+architecture, DynamoDB provisioned at 1 read and 1 write capacity unit per
+table, seven-day log retention, and optional SNS notifications. The product
+stream, notification worker, topic, and email subscription are omitted when
+`LowStockEmailAddress` is empty. The dashboard does not poll, and no EC2, RDS,
+NAT Gateway, X-Ray tracing, or SMS resources are configured. API access logs
+still generate CloudWatch ingestion, and AWS Free Tier eligibility and pricing
+vary by account, region, and usage; review current charges before deployment.
+Export any data that must be kept before deleting a development stack.
+
 ## Local development
 
 Requirements: Node.js 20 or newer and npm.

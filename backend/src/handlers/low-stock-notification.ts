@@ -4,6 +4,7 @@ import type {
   DynamoDBStreamEvent,
   AttributeValue,
 } from 'aws-lambda';
+import { logError } from '../observability/structured-logger.js';
 
 export interface LowStockAlert {
   productId: string;
@@ -111,14 +112,10 @@ export function createLowStockNotificationHandler(
           await publisher.publish(alert);
         }
       } catch (error) {
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            message: 'Low-stock notification failed.',
-            eventId: record.eventID,
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-          }),
-        );
+        logError('Low-stock notification failed.', error, {
+          operation: 'notifyLowStock',
+          ...(record.eventID === undefined ? {} : { eventId: record.eventID }),
+        });
 
         const sequenceNumber = record.dynamodb?.SequenceNumber;
         if (!sequenceNumber) {

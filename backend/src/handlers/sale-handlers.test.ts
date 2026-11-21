@@ -198,6 +198,15 @@ describe('sale handler', () => {
     expect(responseBody<{ message: string }>(response.body)).toEqual({
       message: 'Internal server error.',
     });
+    expect(logError).toHaveBeenCalledWith(
+      JSON.stringify({
+        level: 'ERROR',
+        message: 'Sale creation failed.',
+        operation: 'createSale',
+        requestId: 'test-request',
+        errorName: 'Error',
+      }),
+    );
     expect(logError.mock.calls[0]?.[0]).not.toContain(
       'database connection detail',
     );
