@@ -28,6 +28,10 @@ vi.mock('react-oidc-context', () => ({
   useAuth: () => authState,
 }));
 
+vi.mock('./CategoryInventoryChart', () => ({
+  default: () => <section aria-label="Stock by category" />,
+}));
+
 vi.mock('./api/products', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api/products')>();
   return { ...actual, fetchProducts: vi.fn() };

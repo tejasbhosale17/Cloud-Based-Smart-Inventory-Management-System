@@ -18,6 +18,11 @@ empty, and error states. Employees sign in through Amazon Cognito Managed Login.
 The browser uses the OIDC authorization-code flow with PKCE; the API client sends
 the access token as a bearer token.
 
+Inventory analytics include current stock value (unit price multiplied by
+on-hand quantity), low-stock and category summaries, and a Chart.js bar chart of
+units by category. Analytics recalculate when products are loaded or a sale
+updates stock; the dashboard does not poll the API.
+
 ## Product API handlers
 
 The backend exports Lambda handlers for product creation, listing, retrieval,

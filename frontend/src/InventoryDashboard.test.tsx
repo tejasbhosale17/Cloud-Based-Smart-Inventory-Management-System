@@ -14,6 +14,26 @@ import InventoryDashboard from './InventoryDashboard';
 import type { Product } from './types/product';
 import { UnauthorizedRequestError } from './api/products';
 
+vi.mock('./CategoryInventoryChart', () => ({
+  default: ({
+    categories,
+  }: {
+    categories: Array<{
+      category: string;
+      totalUnits: number;
+      inventoryValue: number;
+    }>;
+  }) => (
+    <section aria-label="Stock by category">
+      {categories.map(({ category, totalUnits }) => (
+        <p key={category}>
+          {category}: {totalUnits} units
+        </p>
+      ))}
+    </section>
+  ),
+}));
+
 const products: Product[] = [
   {
     productId: 'notebook',
@@ -99,6 +119,9 @@ describe('inventory dashboard', () => {
 
     expect(await screen.findByText('Classic Notebook')).toBeInTheDocument();
     expect(screen.getByText('145')).toBeInTheDocument();
+    expect(screen.getByText('$1,109.73')).toBeInTheDocument();
+    expect(screen.getByText('Electronics: 25 units')).toBeInTheDocument();
+    expect(screen.getByText('Stationery: 120 units')).toBeInTheDocument();
     expect(
       screen.getAllByText('2', { selector: '.summary-value' }),
     ).toHaveLength(2);
@@ -238,5 +261,6 @@ describe('inventory dashboard', () => {
       'Sale recorded: 2 units.',
     );
     expect(screen.getByText('118')).toBeInTheDocument();
+    expect(screen.getByText('$1,099.75')).toBeInTheDocument();
   });
 });

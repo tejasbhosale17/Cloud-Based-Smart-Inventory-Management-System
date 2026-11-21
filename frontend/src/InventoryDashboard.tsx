@@ -1,6 +1,11 @@
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { UnauthorizedRequestError } from './api/products';
+import CategoryInventoryChart from './CategoryInventoryChart';
+import {
+  calculateInventoryAnalytics,
+  isProductLowStock,
+} from './analytics/inventory-analytics';
 import type { Sale } from './types/sale';
 import type { Product } from './types/product';
 
@@ -14,10 +19,6 @@ interface InventoryDashboardProps {
   onUnauthorized: () => Promise<void>;
   signOutError?: string;
   userEmail?: string;
-}
-
-function isLowStock(product: Product): boolean {
-  return product.quantity <= product.lowStockThreshold;
 }
 
 function InventoryDashboard({
@@ -78,10 +79,11 @@ function InventoryDashboard({
     };
   }, [loadProducts, onUnauthorized, retryCount]);
 
-  const categories = useMemo(
-    () => [...new Set(products.map((product) => product.category))].sort(),
+  const analytics = useMemo(
+    () => calculateInventoryAnalytics(products),
     [products],
   );
+  const categories = analytics.categories.map(({ category }) => category);
 
   const filteredProducts = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -93,17 +95,11 @@ function InventoryDashboard({
         product.category.toLowerCase().includes(normalizedSearch);
       const matchesCategory =
         selectedCategory === 'all' || product.category === selectedCategory;
-      const matchesStock = stockFilter === 'all' || isLowStock(product);
+      const matchesStock = stockFilter === 'all' || isProductLowStock(product);
 
       return matchesSearch && matchesCategory && matchesStock;
     });
   }, [products, searchTerm, selectedCategory, stockFilter]);
-
-  const totalUnits = products.reduce(
-    (total, product) => total + product.quantity,
-    0,
-  );
-  const lowStockCount = products.filter(isLowStock).length;
 
   function clearFilters() {
     setSearchTerm('');
@@ -313,7 +309,7 @@ function InventoryDashboard({
                   </span>
                   <span>Product SKUs</span>
                 </div>
-                <p className="summary-value">{products.length}</p>
+                <p className="summary-value">{analytics.productCount}</p>
                 <p className="summary-caption">Products in your catalog</p>
               </article>
               <article className="summary-card">
@@ -324,7 +320,7 @@ function InventoryDashboard({
                   <span>Total units</span>
                 </div>
                 <p className="summary-value">
-                  {new Intl.NumberFormat('en-US').format(totalUnits)}
+                  {new Intl.NumberFormat('en-US').format(analytics.totalUnits)}
                 </p>
                 <p className="summary-caption">Units currently in stock</p>
               </article>
@@ -335,7 +331,7 @@ function InventoryDashboard({
                   </span>
                   <span>Low stock items</span>
                 </div>
-                <p className="summary-value">{lowStockCount}</p>
+                <p className="summary-value">{analytics.lowStockCount}</p>
                 <p className="summary-caption">At or below reorder level</p>
               </article>
               <article className="summary-card">
@@ -345,10 +341,27 @@ function InventoryDashboard({
                   </span>
                   <span>Categories</span>
                 </div>
-                <p className="summary-value">{categories.length}</p>
+                <p className="summary-value">{analytics.categoryCount}</p>
                 <p className="summary-caption">Product categories</p>
               </article>
+              <article className="summary-card">
+                <div className="summary-card-heading">
+                  <span className="summary-icon icon-green" aria-hidden="true">
+                    $
+                  </span>
+                  <span>Inventory value</span>
+                </div>
+                <p className="summary-value">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                  }).format(analytics.inventoryValue)}
+                </p>
+                <p className="summary-caption">Current stock at unit price</p>
+              </article>
             </section>
+
+            <CategoryInventoryChart categories={analytics.categories} />
 
             <section
               className="inventory-section"
@@ -363,9 +376,9 @@ function InventoryDashboard({
                     products
                   </p>
                 </div>
-                {lowStockCount > 0 && (
+                {analytics.lowStockCount > 0 && (
                   <span className="low-stock-summary">
-                    {lowStockCount} need attention
+                    {analytics.lowStockCount} need attention
                   </span>
                 )}
               </div>
@@ -450,7 +463,7 @@ function InventoryDashboard({
                     </thead>
                     <tbody>
                       {filteredProducts.map((product) => {
-                        const lowStock = isLowStock(product);
+                        const lowStock = isProductLowStock(product);
 
                         return (
                           <tr key={product.productId}>
