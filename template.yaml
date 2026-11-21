@@ -17,6 +17,16 @@ Parameters:
     MaxLength: 63
     AllowedPattern: '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
     Description: Lowercase prefix unique within the deployment region for the Cognito domain.
+  LowStockEmailAddress:
+    Type: String
+    Default: ''
+    Description: Optional email recipient; confirm the SNS subscription before alerts can be delivered.
+
+Conditions:
+  HasLowStockEmailAddress: !Not
+    - !Equals
+      - !Ref LowStockEmailAddress
+      - ''
 
 Globals:
   Function:
@@ -71,6 +81,10 @@ Resources:
       KeySchema:
         - AttributeName: productId
           KeyType: HASH
+      StreamSpecification: !If
+        - HasLowStockEmailAddress
+        - StreamViewType: NEW_AND_OLD_IMAGES
+        - !Ref AWS::NoValue
       SSESpecification:
         SSEEnabled: true
 
@@ -148,6 +162,20 @@ Resources:
     Properties:
       Domain: !Ref CognitoDomainPrefix
       UserPoolId: !Ref EmployeeUserPool
+
+  LowStockTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasLowStockEmailAddress
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-low-stock'
+
+  LowStockEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasLowStockEmailAddress
+    Properties:
+      Protocol: email
+      TopicArn: !Ref LowStockTopic
+      Endpoint: !Ref LowStockEmailAddress
 
   CreateProductFunction:
     Type: AWS::Serverless::Function
@@ -326,6 +354,43 @@ Resources:
         Target: es2022
         Format: esm
 
+  LowStockNotificationFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasLowStockEmailAddress
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.notifyLowStock
+      Environment:
+        Variables:
+          LOW_STOCK_TOPIC_ARN: !Ref LowStockTopic
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource: !Ref LowStockTopic
+      Events:
+        ProductInventoryChanges:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt ProductsTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumRetryAttempts: 3
+            Enabled: true
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
 Outputs:
   ApiBaseUrl:
     Description: Base URL for the product API.
@@ -336,6 +401,10 @@ Outputs:
   SalesTableName:
     Description: DynamoDB sales table name.
     Value: !Ref SalesTable
+  LowStockTopicArn:
+    Description: SNS topic ARN for low-stock email alerts.
+    Condition: HasLowStockEmailAddress
+    Value: !Ref LowStockTopic
   CognitoAuthority:
     Description: OIDC issuer for the employee user pool.
     Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${EmployeeUserPool}'

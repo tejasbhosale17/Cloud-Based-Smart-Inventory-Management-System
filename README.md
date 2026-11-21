@@ -45,20 +45,22 @@ scan read cost grows with table size. The dashboard does not poll the backend.
 
 ## AWS SAM API
 
-[`template.yaml`](./template.yaml) defines the HTTP API, five route-specific
-Lambda functions, the DynamoDB product table, an employee Cognito user pool,
-and a public Cognito app client/domain. API Gateway validates Cognito access
-tokens with a JWT authorizer. Each function receives only the DynamoDB action it
-needs, scoped to that table. The table uses provisioned throughput of 1 read
-capacity unit and 1 write capacity unit to keep the development configuration
-predictable; confirm Free Tier eligibility and regional pricing before
-deployment.
+[`template.yaml`](./template.yaml) defines the HTTP API, six route-specific
+Lambda functions, the DynamoDB product and sales tables, a low-stock notification
+worker/topic, an employee Cognito user pool, and a public Cognito app
+client/domain. API Gateway validates Cognito access tokens with a JWT authorizer.
+Each function receives only the permissions it needs. Both tables use
+provisioned throughput of 1 read capacity unit and 1 write capacity unit to keep
+the development configuration predictable; confirm Free Tier eligibility and
+regional pricing before deployment.
 
 Build the Lambda bundles with `npm run sam:build`. To deploy interactively, run
 `sam deploy --guided`, provide an allowed browser origin with the
 `FrontendOrigin` parameter, and provide a `CognitoDomainPrefix` unique within
-the deployment region. The deployed API URL, table name, Cognito issuer, app
-client ID, and managed-login domain are exposed as CloudFormation outputs.
+the deployment region. Optionally provide `LowStockEmailAddress` to create an
+email subscription. The deployed API URL, table names, Cognito issuer, app
+client ID, and managed-login domain are exposed as CloudFormation outputs; the
+SNS topic ARN is output when email notifications are enabled.
 
 For local development, the API Gateway URL is configured for port 3000 in
 [`samconfig.toml`](./samconfig.toml). Copy `env.local.example.json` to
@@ -82,14 +84,13 @@ and logout URLs to the current browser origin.
 The Cognito callback and logout URLs must exactly match `FrontendOrigin`.
 Production callbacks require HTTPS. The S3 static website endpoint is HTTP-only,
 so configure an HTTPS frontend origin (for example, through CloudFront) before
-using Cognito authentication in production. No CloudFront distribution or AWS
-resources are created by this project phase.
+using Cognito authentication in production. The SAM stack provisions resources
+only when deployed; no CloudFront distribution is included.
 
 The user pool allows employee self-registration with verified email and
 password sign-in. The app client has no client secret and only enables the
 authorization-code flow. Access tokens last 60 minutes; expired or revoked
-tokens cause the frontend to clear its session and return to sign-in. No SMS or
-low-stock notification service is configured in this phase.
+tokens cause the frontend to clear its session and return to sign-in.
 
 ## Sales workflow
 
@@ -105,6 +106,24 @@ The dashboard includes an authenticated sale form. A successful sale updates the
 displayed quantity without polling. The sales table uses one provisioned read
 and write capacity unit for the coursework configuration; confirm regional
 pricing and Free Tier eligibility before deployment.
+
+## Low-stock email notifications
+
+The products DynamoDB stream invokes a Lambda when product data changes. It
+publishes an SNS email alert when a product is created at/below its low-stock
+threshold or transitions from healthy stock to low stock. Continuing sales
+while the product remains low do not generate repeated alerts; a restock followed
+by a new threshold crossing can generate another alert. This is event-driven and
+does not poll the table.
+
+Set the optional `LowStockEmailAddress` deployment parameter to create an email
+subscription and confirm it using the message SNS sends. Alerts are not delivered
+until the subscription is confirmed. Leave the parameter empty to disable email
+delivery; the notification topic, worker, subscription, and product-table stream
+are conditionally enabled only when an email address is provided. Only SNS email
+subscriptions are configured; SMS is not implemented.
+Notification failures are retried by the stream event source mapping and do not
+roll back an already committed inventory update or sale.
 
 ## Local development
 

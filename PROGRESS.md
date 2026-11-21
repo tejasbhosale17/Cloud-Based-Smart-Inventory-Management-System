@@ -9,6 +9,6 @@
 | 5     | Cognito authentication                    | Complete    |
 | 6     | Inventory sales workflow                  | Complete    |
 | 7     | Inventory analytics                       | Complete    |
-| 8     | Low-stock email notifications             | Not started |
+| 8     | Low-stock email notifications             | Complete    |
 | 9     | CloudWatch monitoring and cost controls   | Not started |
 | 10    | Deployment and final documentation        | Not started |
