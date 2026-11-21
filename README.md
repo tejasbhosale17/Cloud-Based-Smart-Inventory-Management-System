@@ -86,6 +86,21 @@ authorization-code flow. Access tokens last 60 minutes; expired or revoked
 tokens cause the frontend to clear its session and return to sign-in. No SMS or
 low-stock notification service is configured in this phase.
 
+## Sales workflow
+
+`POST /sales` accepts a `productId` and positive integer `quantity`. The Lambda
+reads the current product price, then uses a DynamoDB transaction to decrement
+inventory and store a sale record in the separate sales table. The transaction
+condition prevents negative inventory; insufficient stock returns `409`, a
+missing product returns `404`, and invalid input returns `400`. Because the
+inventory update and sale record are in one transaction, neither is committed
+without the other.
+
+The dashboard includes an authenticated sale form. A successful sale updates the
+displayed quantity without polling. The sales table uses one provisioned read
+and write capacity unit for the coursework configuration; confirm regional
+pricing and Free Tier eligibility before deployment.
+
 ## Local development
 
 Requirements: Node.js 20 or newer and npm.

@@ -7,7 +7,7 @@
 | 3     | Product management Lambda functions       | Complete    |
 | 4     | API Gateway and infrastructure            | Complete    |
 | 5     | Cognito authentication                    | Complete    |
-| 6     | Inventory sales workflow                  | Not started |
+| 6     | Inventory sales workflow                  | Complete    |
 | 7     | Inventory analytics                       | Not started |
 | 8     | Low-stock email notifications             | Not started |
 | 9     | CloudWatch monitoring and cost controls   | Not started |

@@ -1,11 +1,14 @@
+import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { UnauthorizedRequestError } from './api/products';
+import type { Sale } from './types/sale';
 import type { Product } from './types/product';
 
 type LoadState = 'loading' | 'ready' | 'error';
 type StockFilter = 'all' | 'low';
 
 interface InventoryDashboardProps {
+  createSale: (productId: string, quantity: number) => Promise<Sale>;
   loadProducts: () => Promise<Product[]>;
   onSignOut: () => void;
   onUnauthorized: () => Promise<void>;
@@ -18,6 +21,7 @@ function isLowStock(product: Product): boolean {
 }
 
 function InventoryDashboard({
+  createSale,
   loadProducts,
   onSignOut,
   onUnauthorized,
@@ -31,6 +35,11 @@ function InventoryDashboard({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [retryCount, setRetryCount] = useState(0);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [saleQuantity, setSaleQuantity] = useState('1');
+  const [saleState, setSaleState] = useState<'idle' | 'submitting'>('idle');
+  const [saleMessage, setSaleMessage] = useState('');
+  const [saleError, setSaleError] = useState('');
 
   useEffect(() => {
     let isCurrentRequest = true;
@@ -102,6 +111,50 @@ function InventoryDashboard({
     setStockFilter('all');
   }
 
+  async function submitSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaleMessage('');
+    setSaleError('');
+
+    const quantity = Number(saleQuantity);
+    if (
+      !selectedProductId ||
+      !Number.isSafeInteger(quantity) ||
+      quantity <= 0
+    ) {
+      setSaleError('Select a product and enter a positive whole number.');
+      return;
+    }
+
+    setSaleState('submitting');
+    try {
+      const sale = await createSale(selectedProductId, quantity);
+      setProducts((currentProducts) =>
+        currentProducts.map((product) =>
+          product.productId === sale.productId
+            ? { ...product, quantity: product.quantity - sale.quantity }
+            : product,
+        ),
+      );
+      setSaleMessage(
+        `Sale recorded: ${sale.quantity} unit${sale.quantity === 1 ? '' : 's'}.`,
+      );
+      setSaleQuantity('1');
+    } catch (error) {
+      if (error instanceof UnauthorizedRequestError) {
+        await onUnauthorized();
+        return;
+      }
+      setSaleError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to record the sale. Please try again.',
+      );
+    } finally {
+      setSaleState('idle');
+    }
+  }
+
   return (
     <div className="dashboard-shell">
       <aside className="sidebar">
@@ -168,6 +221,64 @@ function InventoryDashboard({
             <p>Monitor your products and stock levels in one place.</p>
           </div>
         </section>
+
+        {loadState === 'ready' && products.length > 0 && (
+          <section className="sale-section" aria-labelledby="sale-title">
+            <div className="section-heading">
+              <div>
+                <h2 id="sale-title">Record a sale</h2>
+                <p>Stock is reduced only when the sale is accepted.</p>
+              </div>
+            </div>
+            <form
+              className="sale-form"
+              onSubmit={(event) => void submitSale(event)}
+            >
+              <label>
+                <span>Product</span>
+                <select
+                  aria-label="Sale product"
+                  onChange={(event) => setSelectedProductId(event.target.value)}
+                  value={selectedProductId}
+                >
+                  <option value="">Select a product</option>
+                  {products.map((product) => (
+                    <option key={product.productId} value={product.productId}>
+                      {product.name} ({product.quantity} available)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Quantity</span>
+                <input
+                  aria-label="Sale quantity"
+                  min="1"
+                  onChange={(event) => setSaleQuantity(event.target.value)}
+                  type="number"
+                  value={saleQuantity}
+                />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={saleState === 'submitting'}
+                type="submit"
+              >
+                {saleState === 'submitting' ? 'Recording…' : 'Record sale'}
+              </button>
+            </form>
+            {saleMessage && (
+              <p className="sale-success" role="status">
+                {saleMessage}
+              </p>
+            )}
+            {saleError && (
+              <p className="sale-error" role="alert">
+                {saleError}
+              </p>
+            )}
+          </section>
+        )}
 
         {loadState === 'loading' && (
           <div className="state-panel loading-panel" role="status">

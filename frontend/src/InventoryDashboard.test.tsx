@@ -55,6 +55,14 @@ describe('inventory dashboard', () => {
 
     render(
       <InventoryDashboard
+        createSale={async () => ({
+          saleId: 'sale-1',
+          productId: 'notebook',
+          quantity: 1,
+          unitPrice: 4.99,
+          totalAmount: 4.99,
+          soldAt: '2026-01-01T00:00:00.000Z',
+        })}
         loadProducts={loadProducts}
         onSignOut={() => undefined}
         onUnauthorized={async () => undefined}
@@ -75,6 +83,14 @@ describe('inventory dashboard', () => {
   it('shows inventory summaries and filters by search, category, and stock', async () => {
     render(
       <InventoryDashboard
+        createSale={async () => ({
+          saleId: 'sale-1',
+          productId: 'notebook',
+          quantity: 1,
+          unitPrice: 4.99,
+          totalAmount: 4.99,
+          soldAt: '2026-01-01T00:00:00.000Z',
+        })}
         loadProducts={() => Promise.resolve(products)}
         onSignOut={() => undefined}
         onUnauthorized={async () => undefined}
@@ -115,6 +131,14 @@ describe('inventory dashboard', () => {
   it('shows a helpful empty state when there are no products', async () => {
     render(
       <InventoryDashboard
+        createSale={async () => ({
+          saleId: 'sale-1',
+          productId: 'notebook',
+          quantity: 1,
+          unitPrice: 4.99,
+          totalAmount: 4.99,
+          soldAt: '2026-01-01T00:00:00.000Z',
+        })}
         loadProducts={() => Promise.resolve([])}
         onSignOut={() => undefined}
         onUnauthorized={async () => undefined}
@@ -133,6 +157,14 @@ describe('inventory dashboard', () => {
 
     render(
       <InventoryDashboard
+        createSale={async () => ({
+          saleId: 'sale-1',
+          productId: 'notebook',
+          quantity: 1,
+          unitPrice: 4.99,
+          totalAmount: 4.99,
+          soldAt: '2026-01-01T00:00:00.000Z',
+        })}
         loadProducts={loadProducts}
         onSignOut={() => undefined}
         onUnauthorized={async () => undefined}
@@ -152,6 +184,14 @@ describe('inventory dashboard', () => {
     const handleUnauthorized = vi.fn(async () => undefined);
     render(
       <InventoryDashboard
+        createSale={async () => ({
+          saleId: 'sale-1',
+          productId: 'notebook',
+          quantity: 1,
+          unitPrice: 4.99,
+          totalAmount: 4.99,
+          soldAt: '2026-01-01T00:00:00.000Z',
+        })}
         loadProducts={() => Promise.reject(new UnauthorizedRequestError())}
         onSignOut={() => undefined}
         onUnauthorized={handleUnauthorized}
@@ -160,5 +200,43 @@ describe('inventory dashboard', () => {
 
     await waitFor(() => expect(handleUnauthorized).toHaveBeenCalledOnce());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('records a sale and reduces the displayed quantity', async () => {
+    const createSale = vi.fn(async () => ({
+      saleId: 'sale-1',
+      productId: 'notebook',
+      quantity: 2,
+      unitPrice: 4.99,
+      totalAmount: 9.98,
+      soldAt: '2026-01-01T00:00:00.000Z',
+    }));
+
+    render(
+      <InventoryDashboard
+        createSale={createSale}
+        loadProducts={() => Promise.resolve(products)}
+        onSignOut={() => undefined}
+        onUnauthorized={async () => undefined}
+      />,
+    );
+
+    await screen.findByText('Classic Notebook');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sale product' }), {
+      target: { value: 'notebook' },
+    });
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Sale quantity' }),
+      {
+        target: { value: '2' },
+      },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Record sale' }));
+
+    await waitFor(() => expect(createSale).toHaveBeenCalledWith('notebook', 2));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Sale recorded: 2 units.',
+    );
+    expect(screen.getByText('118')).toBeInTheDocument();
   });
 });

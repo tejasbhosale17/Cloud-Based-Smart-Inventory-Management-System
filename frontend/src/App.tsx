@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { fetchProducts, UnauthorizedRequestError } from './api/products';
+import { createSale as submitSale } from './api/sales';
 import type { FrontendConfiguration } from './auth/auth-config';
 import { createCognitoLogoutUrl } from './auth/cognito-logout';
 import LoginPage from './auth/LoginPage';
@@ -26,6 +27,21 @@ function App({ configuration }: AppProps) {
     }
     return fetchProducts(configuration.apiBaseUrl, accessToken);
   }, [accessToken, configuration.apiBaseUrl]);
+
+  const createSale = useCallback(
+    (productId: string, quantity: number) => {
+      if (!accessToken) {
+        return Promise.reject(new UnauthorizedRequestError());
+      }
+      return submitSale(
+        configuration.apiBaseUrl,
+        accessToken,
+        productId,
+        quantity,
+      );
+    },
+    [accessToken, configuration.apiBaseUrl],
+  );
 
   const handleUnauthorized = useCallback(async () => {
     setSessionExpired(true);
@@ -98,6 +114,7 @@ function App({ configuration }: AppProps) {
           ) : (
             <ProtectedRoute>
               <InventoryDashboard
+                createSale={createSale}
                 loadProducts={loadProducts}
                 onSignOut={handleSignOut}
                 onUnauthorized={handleUnauthorized}

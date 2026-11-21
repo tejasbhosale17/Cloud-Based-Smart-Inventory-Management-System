@@ -28,6 +28,7 @@ Globals:
     Environment:
       Variables:
         PRODUCTS_TABLE_NAME: !Ref ProductsTable
+        SALES_TABLE_NAME: !Ref SalesTable
 
 Resources:
   InventoryApi:
@@ -69,6 +70,23 @@ Resources:
           AttributeType: S
       KeySchema:
         - AttributeName: productId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  SalesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-sales'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: saleId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: saleId
           KeyType: HASH
       SSESpecification:
         SSEEnabled: true
@@ -276,6 +294,38 @@ Resources:
         Target: es2022
         Format: esm
 
+  CreateSaleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: lambda.createSale
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt ProductsTable.Arn
+                - !GetAtt SalesTable.Arn
+      Events:
+        CreateSale:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref InventoryApi
+            Path: /sales
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - lambda.ts
+        Bundle: true
+        Minify: true
+        Target: es2022
+        Format: esm
+
 Outputs:
   ApiBaseUrl:
     Description: Base URL for the product API.
@@ -283,6 +333,9 @@ Outputs:
   ProductsTableName:
     Description: DynamoDB product table name.
     Value: !Ref ProductsTable
+  SalesTableName:
+    Description: DynamoDB sales table name.
+    Value: !Ref SalesTable
   CognitoAuthority:
     Description: OIDC issuer for the employee user pool.
     Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${EmployeeUserPool}'

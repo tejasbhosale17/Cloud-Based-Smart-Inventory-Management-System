@@ -243,6 +243,77 @@ select {
   font-size: 12px;
 }
 
+.sale-section {
+  margin-bottom: 26px;
+  border: 1px solid #e6eaf0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgb(22 43 77 / 3%);
+}
+
+.sale-form {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  padding: 0 22px 18px;
+}
+
+.sale-form label {
+  display: grid;
+  gap: 6px;
+  color: #6d7a8e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sale-form select,
+.sale-form input {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #dfe5ed;
+  border-radius: 7px;
+  color: #34445a;
+  background: #fff;
+  font-size: 11px;
+}
+
+.sale-form label:first-child {
+  flex: 1;
+}
+
+.sale-form input {
+  width: 110px;
+}
+
+.button-primary {
+  color: #fff;
+  background: #3272cf;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: #2863b9;
+}
+
+.button-primary:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.sale-success,
+.sale-error {
+  margin: 0;
+  padding: 0 22px 18px;
+  font-size: 12px;
+}
+
+.sale-success {
+  color: #27805f;
+}
+
+.sale-error {
+  color: #9f3933;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -755,6 +826,22 @@ td:last-child {
   }
 
   .section-heading {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .sale-form {
+    flex-wrap: wrap;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .sale-form label:first-child {
+    flex-basis: 100%;
+  }
+
+  .sale-success,
+  .sale-error {
     padding-right: 14px;
     padding-left: 14px;
   }
