@@ -89,13 +89,17 @@ export class DynamoDbSaleRepository implements SaleRepository {
       );
     } catch (error) {
       if (error instanceof TransactionCanceledException) {
-        const firstReason = error.CancellationReasons?.[0];
-        if (firstReason?.Code === 'ConditionalCheckFailed') {
-          if (product.quantity < quantity) {
-            throw new InsufficientStockError();
-          }
+        const currentProductResponse = await this.client.send(
+          new GetCommand({
+            TableName: this.productsTableName,
+            Key: { productId },
+            ConsistentRead: true,
+          }),
+        );
+        if (!currentProductResponse.Item) {
           throw new ProductNotFoundForSaleError();
         }
+        throw new InsufficientStockError();
       }
       throw error;
     }

@@ -1,8 +1,11 @@
 // @vitest-environment node
 
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
+import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
+import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSaleHandler } from './sale-handlers.js';
+import { DynamoDbSaleRepository } from '../sales/dynamodb-sale-repository.js';
 import {
   InsufficientStockError,
   ProductNotFoundForSaleError,
@@ -131,6 +134,42 @@ describe('sale handler', () => {
     expect(responseBody<{ message: string }>(response.body).message).toContain(
       'Insufficient stock',
     );
+  });
+
+  it('returns conflict when a concurrent sale makes the transaction condition fail', async () => {
+    const transactionError = new TransactionCanceledException({
+      message: 'Transaction canceled.',
+      $metadata: { httpStatusCode: 400 },
+      CancellationReasons: [
+        { Code: 'ConditionalCheckFailed', Message: 'Condition not met.' },
+        { Code: 'None' },
+      ],
+    });
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({
+        Item: { productId: 'product-1', price: 4.99, quantity: 5 },
+      })
+      .mockRejectedValueOnce(transactionError)
+      .mockResolvedValueOnce({
+        Item: { productId: 'product-1', price: 4.99, quantity: 1 },
+      });
+    const repository = new DynamoDbSaleRepository(
+      { send } as unknown as DynamoDBDocumentClient,
+      'products-table',
+      'sales-table',
+    );
+    const handler = createSaleHandler(repository);
+
+    const response = await handler(
+      createEvent(JSON.stringify({ productId: 'product-1', quantity: 2 })),
+    );
+
+    expect(response.statusCode).toBe(409);
+    expect(responseBody<{ message: string }>(response.body).message).toContain(
+      'Insufficient stock',
+    );
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it('returns not found when the product does not exist', async () => {
