@@ -7,8 +7,9 @@ with a React and TypeScript frontend and AWS serverless backend.
 
 - `frontend/` - React, TypeScript, and Vite application.
 - `backend/` - TypeScript AWS Lambda handlers.
-- AWS infrastructure and service integrations will be added in their planned
-  project phases.
+- `template.yaml` - AWS SAM infrastructure for the API, data, auth, hosting, and
+  optional notifications.
+- `docs/` - Deployment, API, testing, cost, presentation, and demo documentation.
 
 ## Inventory dashboard
 
@@ -43,49 +44,62 @@ credentials/region supplied by the Lambda execution environment. The list handle
 uses a paginated DynamoDB scan, suitable for this small coursework catalog;
 scan read cost grows with table size. The dashboard does not poll the backend.
 
-## AWS SAM API
+## Deployment and frontend hosting
 
-[`template.yaml`](./template.yaml) defines the HTTP API, six route-specific
-Lambda functions, the DynamoDB product and sales tables, a low-stock notification
-worker/topic, an employee Cognito user pool, and a public Cognito app
-client/domain. API Gateway validates Cognito access tokens with a JWT authorizer.
-Each function receives only the permissions it needs. Both tables use
-provisioned throughput of 1 read capacity unit and 1 write capacity unit to keep
-the development configuration predictable; confirm Free Tier eligibility and
-regional pricing before deployment.
+[`template.yaml`](./template.yaml) defines the authenticated HTTP API, six
+route-specific API Lambda functions, DynamoDB product and sales tables, Cognito,
+optional low-stock SNS email notifications, CloudWatch logs, and frontend
+hosting. The frontend is a Vite static build in a private S3 bucket. CloudFront
+uses Origin Access Control to read the bucket and serves it over HTTPS; the
+bucket is not public and does not use the HTTP-only S3 website endpoint.
 
-Build the Lambda bundles with `npm run sam:build`. To deploy interactively, run
-`sam deploy --guided`, provide an allowed browser origin with the
-`FrontendOrigin` parameter, and provide a `CognitoDomainPrefix` unique within
-the deployment region. Optionally provide `LowStockEmailAddress` to create an
-email subscription. The deployed API URL, table names, Cognito issuer, app
-client ID, and managed-login domain are exposed as CloudFormation outputs; the
-SNS topic ARN is output when email notifications are enabled.
+The template's configuration parameters are:
 
-For local development, the API Gateway URL is configured for port 3000 in
-[`samconfig.toml`](./samconfig.toml). Copy `env.local.example.json` to
-`env.local.json` and update its table name to the deployed development table,
-then run:
+| Parameter              | Default                 | Purpose                                                                            |
+| ---------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
+| `CognitoDomainPrefix`  | Required                | Unique lowercase Cognito domain prefix in the selected region                      |
+| `FrontendOrigin`       | `http://localhost:5173` | Local development origin; the CloudFront HTTPS origin is added automatically       |
+| `StageName`            | `dev`                   | API Gateway stage                                                                  |
+| `LowStockEmailAddress` | Empty                   | Optional SNS email recipient; empty disables the stream and notification resources |
+| AWS region             | Not pinned              | Select explicitly when deploying with `--region`                                   |
+
+`samconfig.toml` provides the development stack name and safe deploy defaults.
+Copy it to the ignored `samconfig.local.toml` before guided deployment so local
+parameter values are not committed. These commands are preparation instructions
+only; no AWS resources have been created or deployed:
+
+```powershell
+Copy-Item .\samconfig.toml .\samconfig.local.toml
+npm run sam:build
+sam deploy --guided --region <aws-region> --config-file .\samconfig.local.toml
+```
+
+Review the change set, AWS region, parameters, and current service pricing before
+confirming a deployment. Leave `LowStockEmailAddress` empty unless email alerts
+are being demonstrated. If configured, confirm the subscription email sent by
+SNS. See [docs/deployment.md](./docs/deployment.md) for all parameters, outputs,
+and future frontend publication steps.
+
+After an approved deployment, obtain stack outputs and use `ApiBaseUrl`,
+`CognitoAuthority`, `CognitoClientId`, `CognitoDomain`, and `FrontendUrl` as the
+frontend's build-time settings. Then build `frontend/`, sync its `dist/` folder
+to the output `FrontendBucketName`, and invalidate the output
+`FrontendDistributionId`. This project does not upload or deploy the frontend
+during preparation.
+
+For local development, `samconfig.toml` configures the API on port 3000. Copy
+[`env.local.example.json`](./env.local.example.json) to `env.local.json` and set
+the development table name, then run:
 
 ```powershell
 sam local start-api --profile <aws-profile> --env-vars env.local.json
 ```
 
-SAM local invokes the handlers on your machine, but DynamoDB requests still use
-the configured AWS credentials and target the named AWS table. Use a dedicated
-development stack and never put credentials in the environment file.
-Use a deployed development API to verify API Gateway's JWT authorization
-end-to-end; local Lambda invocation does not replace that verification.
-Copy `frontend/.env.example` to `frontend/.env.local`, then fill in the API URL
-and Cognito values from the stack outputs. For local sign-in, set
-`FrontendOrigin` to `http://localhost:5173`; the frontend defaults its callback
-and logout URLs to the current browser origin.
-
-The Cognito callback and logout URLs must exactly match `FrontendOrigin`.
-Production callbacks require HTTPS. The S3 static website endpoint is HTTP-only,
-so configure an HTTPS frontend origin (for example, through CloudFront) before
-using Cognito authentication in production. The SAM stack provisions resources
-only when deployed; no CloudFront distribution is included.
+SAM local invokes handlers on your machine, but DynamoDB requests still use the
+configured AWS credentials and target the named AWS table. Never place
+credentials in the environment file. Copy [`frontend/.env.example`](./frontend/.env.example)
+to `frontend/.env.local` for local browser development. Local HTTP is allowed
+only for localhost; hosted Cognito callbacks use the CloudFront HTTPS URL.
 
 The user pool allows employee self-registration with verified email and
 password sign-in. The app client has no client secret and only enables the
@@ -152,13 +166,14 @@ dashboards, which can add recurring charges.
 
 Cost controls include 128 MB Lambda functions with a 5-second timeout and ARM64
 architecture, DynamoDB provisioned at 1 read and 1 write capacity unit per
-table, seven-day log retention, and optional SNS notifications. The product
-stream, notification worker, topic, and email subscription are omitted when
-`LowStockEmailAddress` is empty. The dashboard does not poll, and no EC2, RDS,
-NAT Gateway, X-Ray tracing, or SMS resources are configured. API access logs
-still generate CloudWatch ingestion, and AWS Free Tier eligibility and pricing
-vary by account, region, and usage; review current charges before deployment.
-Export any data that must be kept before deleting a development stack.
+table, seven-day log retention, a `PriceClass_100` CloudFront distribution, and
+optional SNS notifications. The product stream, notification worker, topic, and
+email subscription are omitted when `LowStockEmailAddress` is empty. The
+dashboard does not poll, and no EC2, RDS, NAT Gateway, X-Ray tracing, or SMS
+resources are configured. CloudFront, S3, API access logs, and the SAM artifact
+bucket can still incur charges. AWS Free Tier eligibility and pricing vary by
+account, region, and usage; review current charges before deployment. Export
+any data that must be kept before deleting a development stack.
 
 ## Local development
 
@@ -177,18 +192,39 @@ are configuration values, not credentials; do not commit `.env.local` files.
 Run these from the repository root:
 
 ```powershell
+npm ci
 npm run format:check
 npm run lint
 npm run typecheck
 npm test
+npm run build --workspace frontend
+npm audit
+npm run sam:build
 ```
+
+With AWS SAM CLI installed, also run `sam validate --lint --template-file
+template.yaml`. See [docs/testing.md](./docs/testing.md) for what each check
+covers and post-deployment smoke checks.
 
 ## Configuration and security
 
 Do not commit `.env` files, AWS credentials, or other secrets. Cognito's public
 app client ID and issuer/domain are not secrets, but keep per-environment
-settings in ignored local environment files. Lambda AWS access uses its
-execution role; do not add static AWS credentials to the application.
+settings in ignored local environment files. Keep `samconfig.local.toml`
+uncommitted, especially when it contains an optional notification recipient.
+Lambda AWS access uses its execution role; do not add static AWS credentials
+to the application. The S3 bucket blocks public access and grants object reads
+only to its CloudFront distribution.
+
+## Project documentation
+
+- [Architecture diagrams](./.github/modernize/assessment/engines/facts/architecture-diagram.md)
+- [API reference](./docs/api.md)
+- [Deployment guide](./docs/deployment.md)
+- [Testing and validation](./docs/testing.md)
+- [AWS cost controls](./docs/cost-controls.md)
+- [Presentation notes](./docs/presentation-notes.md)
+- [Demonstration script](./docs/demo-script.md)
 
 ## Project progress
 

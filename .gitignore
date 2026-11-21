@@ -8,3 +8,4 @@ coverage/
 *.log
 .aws-sam/
 env.local.json
+samconfig.local.toml

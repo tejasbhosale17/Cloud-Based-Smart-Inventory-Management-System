@@ -10,7 +10,9 @@ Parameters:
   FrontendOrigin:
     Type: String
     Default: http://localhost:5173
-    Description: Browser callback and origin allowed to use the application.
+    Description: Local development origin; the CloudFront origin is added automatically.
+    AllowedPattern: '^(https://[A-Za-z0-9.-]+(:[0-9]{1,5})?|http://(localhost|127\.0\.0\.1)(:[0-9]{1,5})?)$'
+    ConstraintDescription: Use HTTPS for hosted origins; HTTP is allowed only for localhost.
   CognitoDomainPrefix:
     Type: String
     MinLength: 1
@@ -51,16 +53,125 @@ Resources:
       LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-access'
       RetentionInDays: 7
 
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-frontend-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub '${AWS::StackName}-frontend-cache'
+        Comment: Cache static frontend content for five minutes by default.
+        DefaultTTL: 300
+        MaxTTL: 86400
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub '${AWS::StackName} frontend'
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        HttpVersion: http2and3
+        Origins:
+          - Id: FrontendS3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: FrontendS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          CachePolicyId: !Ref FrontendCachePolicy
+          Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+          MinimumProtocolVersion: TLSv1.2_2021
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}'
+
   InventoryApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref StageName
+      DefinitionBody:
+        openapi: '3.0.1'
+        info:
+          title: Cloud-Based Smart Inventory API
+          version: '1.0'
+        paths: {}
       AccessLogSettings:
         DestinationArn: !GetAtt InventoryApiAccessLogGroup.Arn
         Format: '{"requestId":"$context.requestId","routeKey":"$context.routeKey","status":"$context.status","responseLength":"$context.responseLength"}'
       CorsConfiguration:
-        AllowOrigins:
-          - !Ref FrontendOrigin
+        AllowOrigins: !Split
+          - ','
+          - !Sub '${FrontendOrigin},https://${FrontendDistribution.DomainName}'
         AllowHeaders:
           - authorization
           - content-type
@@ -160,8 +271,10 @@ Resources:
         - COGNITO
       CallbackURLs:
         - !Ref FrontendOrigin
+        - !Sub 'https://${FrontendDistribution.DomainName}'
       LogoutURLs:
         - !Ref FrontendOrigin
+        - !Sub 'https://${FrontendDistribution.DomainName}'
       AccessTokenValidity: 60
       IdTokenValidity: 60
       RefreshTokenValidity: 1
@@ -448,9 +561,21 @@ Resources:
       RetentionInDays: 7
 
 Outputs:
+  DeploymentRegion:
+    Description: AWS region used by this stack.
+    Value: !Ref AWS::Region
   ApiBaseUrl:
     Description: Base URL for the product API.
     Value: !Sub 'https://${InventoryApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${StageName}'
+  FrontendUrl:
+    Description: HTTPS URL for the deployed frontend.
+    Value: !Sub 'https://${FrontendDistribution.DomainName}'
+  FrontendBucketName:
+    Description: Private S3 bucket for frontend build artifacts.
+    Value: !Ref FrontendBucket
+  FrontendDistributionId:
+    Description: CloudFront distribution ID for frontend cache invalidation.
+    Value: !Ref FrontendDistribution
   ProductsTableName:
     Description: DynamoDB product table name.
     Value: !Ref ProductsTable
@@ -464,6 +589,9 @@ Outputs:
   CognitoAuthority:
     Description: OIDC issuer for the employee user pool.
     Value: !Sub 'https://cognito-idp.${AWS::Region}.${AWS::URLSuffix}/${EmployeeUserPool}'
+  CognitoUserPoolId:
+    Description: Cognito user pool ID for employee authentication.
+    Value: !Ref EmployeeUserPool
   CognitoClientId:
     Description: Public app client ID for the frontend.
     Value: !Ref EmployeeUserPoolClient
