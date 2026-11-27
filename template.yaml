@@ -239,7 +239,7 @@ Resources:
         - email
       AdminCreateUserConfig:
         AllowAdminCreateUserOnly: false
-      MfaConfiguration: OFF
+      MfaConfiguration: 'OFF'
       Policies:
         PasswordPolicy:
           MinimumLength: 8
